@@ -1,0 +1,32 @@
+[회귀분석 모형]
+fill_rate ~ employment_rate + advancement_rate + competition_rate + C(year)
+
+                            OLS Regression Results                            
+==============================================================================
+Dep. Variable:              fill_rate   R-squared:                       0.249
+Model:                            OLS   Adj. R-squared:                  0.187
+Method:                 Least Squares   F-statistic:                     3.986
+Date:                Mon, 06 Jul 2026   Prob (F-statistic):            0.00346
+Time:                        18:04:53   Log-Likelihood:                -179.21
+No. Observations:                  66   AIC:                             370.4
+Df Residuals:                      60   BIC:                             383.6
+Df Model:                           5                                         
+Covariance Type:            nonrobust                                         
+====================================================================================
+                       coef    std err          t      P>|t|      [0.025      0.975]
+------------------------------------------------------------------------------------
+Intercept           97.6776      6.456     15.131      0.000      84.765     110.591
+C(year)[T.2024]      0.4211      1.208      0.348      0.729      -1.996       2.838
+C(year)[T.2025]     -0.2326      1.315     -0.177      0.860      -2.864       2.399
+employment_rate     -0.0991      0.119     -0.836      0.407      -0.336       0.138
+advancement_rate     0.1577      0.072      2.199      0.032       0.014       0.301
+competition_rate     0.4393      0.180      2.434      0.018       0.078       0.800
+==============================================================================
+Omnibus:                       43.984   Durbin-Watson:                   1.418
+Prob(Omnibus):                  0.000   Jarque-Bera (JB):              172.867
+Skew:                          -1.909   Prob(JB):                     2.90e-38
+Kurtosis:                       9.949   Cond. No.                         829.
+==============================================================================
+
+Notes:
+[1] Standard Errors assume that the covariance matrix of the errors is correctly specified.
