@@ -239,3 +239,4 @@ Power BI 대시보드는 다음과 같은 구조로 구성하였다.
 ## Final Report
 
 - [교육 빅데이터 기반 대학 입학성과 분석 최종보고서](reports/final_report/education_admission_final_report.pdf)
+- [프로젝트 1페이지 요약서](reports/project_summary/education_admission_project_summary.pdf)
