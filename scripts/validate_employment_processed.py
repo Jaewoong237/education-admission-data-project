@@ -5,7 +5,6 @@ import pandas as pd
 
 
 BASE_DIR = Path(__file__).resolve().parents[1]
-
 TARGET_PATH = BASE_DIR / "data" / "interim" / "target_universities.csv"
 PROCESSED_PATH = BASE_DIR / "data" / "processed" / "employment_rate_target_universities.csv"
 REPORT_DIR = BASE_DIR / "reports" / "data_validation"
@@ -21,22 +20,56 @@ EXPECTED_PUBLIC_DATA_YEAR = {
 RATE_TOLERANCE = 0.01
 OFFICIAL_RATE_TOLERANCE = 0.11
 
+REQUIRED_COLUMNS = {
+    "공시연도",
+    "자료연도",
+    "대학명",
+    "졸업자",
+    "취업자",
+    "진학자",
+    "입대자",
+    "취업불가능자",
+    "외국인유학생",
+    "제외인정자",
+    "취업률_계산분모",
+    "취업률(%)",
+    "취업률_원자료_평균",
+    "취업률_원자료차이(%p)",
+    "진학률(%)",
+    "원자료_행수",
+}
+
 
 def close_enough(left, right, tolerance=RATE_TOLERANCE):
     return np.isclose(left, right, atol=tolerance, rtol=0, equal_nan=False)
 
 
 def main():
+    if not PROCESSED_PATH.exists():
+        raise SystemExit(
+            "가공 CSV가 없습니다. 먼저 다음 명령을 실행하세요:\n"
+            "python scripts/process_employment_rate.py"
+        )
+
     target = pd.read_csv(TARGET_PATH, encoding="utf-8-sig")
     data = pd.read_csv(PROCESSED_PATH, encoding="utf-8-sig")
 
-    REPORT_DIR.mkdir(parents=True, exist_ok=True)
+    missing_columns = sorted(REQUIRED_COLUMNS - set(data.columns))
+    if missing_columns:
+        raise SystemExit(
+            "현재 employment_rate_target_universities.csv는 수정 전 구버전입니다.\n"
+            f"누락 컬럼: {missing_columns}\n\n"
+            "먼저 아래 명령으로 가공 CSV를 새로 생성한 뒤 다시 검증하세요:\n"
+            "python scripts/process_employment_rate.py\n"
+            "python scripts/validate_employment_processed.py"
+        )
 
+    REPORT_DIR.mkdir(parents=True, exist_ok=True)
     expected_rows = len(target) * len(EXPECTED_PUBLIC_DATA_YEAR)
 
-    # -------------------------
+    # =========================
     # 1. 구조 검증
-    # -------------------------
+    # =========================
     structure_checks = []
 
     structure_checks.append(
@@ -57,11 +90,7 @@ def main():
     per_university = data["대학명"].value_counts()
     bad_university_counts = per_university[per_university != len(EXPECTED_PUBLIC_DATA_YEAR)]
     structure_checks.append(
-        (
-            "대학별 3개년 존재",
-            bad_university_counts.empty,
-            bad_university_counts.to_dict(),
-        )
+        ("대학별 3개년 존재", bad_university_counts.empty, bad_university_counts.to_dict())
     )
 
     year_pairs = set(
@@ -77,9 +106,9 @@ def main():
         )
     )
 
-    # -------------------------
+    # =========================
     # 2. 계산식 재검증
-    # -------------------------
+    # =========================
     expected_denominator = (
         data["졸업자"]
         - data["진학자"]
@@ -101,18 +130,19 @@ def main():
     data["검증_취업률계산일치"] = close_enough(data["취업률(%)"], expected_employment_rate)
     data["검증_진학률계산일치"] = close_enough(data["진학률(%)"], expected_advancement_rate)
 
-    # 단일 원자료 행인 대학은 대학알리미 공시 취업률과 직접 비교한다.
+    # 단일 원자료 행 대학은 대학알리미 공시 취업률과 직접 비교.
     single_raw_row = data["원자료_행수"].eq(1) & data["취업률_원자료_평균"].notna()
     official_diff = (data["취업률(%)"] - data["취업률_원자료_평균"]).abs()
+
     data["검증_원자료취업률일치"] = True
     data.loc[single_raw_row, "검증_원자료취업률일치"] = (
         official_diff.loc[single_raw_row] <= OFFICIAL_RATE_TOLERANCE
     )
 
-    # 캠퍼스 합산 대학은 원자료 공시 취업률의 단순 평균과 비교하지 않는다.
+    # 복수 캠퍼스는 인원 합산 후 재계산하므로 공시 취업률 단순평균과 직접 비교하지 않음.
     data["검증_비고"] = ""
     data.loc[data["원자료_행수"].gt(1), "검증_비고"] = (
-        "캠퍼스/원자료 복수행: 인원 합산 후 취업률 재계산, 공시율 단순평균과 직접 비교 제외"
+        "캠퍼스/원자료 복수행: 인원 합산 후 취업률 재계산, 공시율 단순평균 직접 비교 제외"
     )
 
     validation_columns = [
@@ -144,9 +174,9 @@ def main():
 
     data[detail_columns].to_csv(DETAIL_PATH, index=False, encoding="utf-8-sig")
 
-    # -------------------------
+    # =========================
     # 3. 최종 요약
-    # -------------------------
+    # =========================
     structure_pass = all(check[1] for check in structure_checks)
     row_pass_count = int(data["검증_최종"].eq("PASS").sum())
     row_fail_count = int(data["검증_최종"].eq("FAIL").sum())
@@ -183,7 +213,6 @@ def main():
     ]
 
     SUMMARY_PATH.write_text("\n".join(summary_lines), encoding="utf-8")
-
     print("\n".join(summary_lines))
 
     if not overall_pass:
