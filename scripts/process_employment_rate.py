@@ -1,6 +1,8 @@
 import re
-import pandas as pd
 from pathlib import Path
+
+import pandas as pd
+
 
 # =========================
 # 1. 경로 설정
@@ -26,7 +28,11 @@ target["대학명"] = target["대학명"].astype(str).str.strip()
 # 3. 보조 함수
 # =========================
 
+
 def normalize_text(text):
+    if pd.isna(text):
+        return ""
+
     return (
         str(text)
         .strip()
@@ -36,24 +42,6 @@ def normalize_text(text):
         .replace("\t", "")
     )
 
-
-def find_column(df, keyword):
-    for col in df.columns:
-        if keyword in normalize_text(col):
-            return col
-
-    print("\n[현재 컬럼 목록]")
-    for c in df.columns:
-        print(repr(c))
-
-    raise KeyError(f"'{keyword}'에 해당하는 컬럼을 찾지 못했습니다.")
-
-
-def find_column_optional(df, keyword):
-    for col in df.columns:
-        if keyword in normalize_text(col):
-            return col
-    return None
 
 
 def to_number(series):
@@ -68,6 +56,7 @@ def to_number(series):
     )
 
 
+
 def get_public_year_from_filename(file_path: Path) -> int:
     match = re.search(r"(\d{4})", file_path.name)
     if match:
@@ -75,28 +64,165 @@ def get_public_year_from_filename(file_path: Path) -> int:
     raise ValueError(f"파일명에서 공시연도를 찾지 못했습니다: {file_path.name}")
 
 
-def read_academyinfo_excel(file_path: Path) -> pd.DataFrame:
-    preview = pd.read_excel(file_path, header=None, nrows=30)
 
-    header_row = None
+def find_header_row(raw_no_header: pd.DataFrame) -> int:
+    """대학알리미 다단 헤더에서 최상위 헤더 행을 찾는다."""
+    preview_rows = min(30, len(raw_no_header))
 
-    for idx, row in preview.iterrows():
-        row_values = [normalize_text(v) for v in row.tolist()]
+    for idx in range(preview_rows):
+        row_values = [normalize_text(v) for v in raw_no_header.iloc[idx].tolist()]
         has_year = "연도" in row_values or "기준연도" in row_values
-        has_school = any("학교" in v for v in row_values)
+        has_school = any("학교명" in v for v in row_values)
 
         if has_year and has_school:
-            header_row = idx
-            break
+            return idx
 
-    if header_row is None:
-        raise ValueError(f"헤더 행을 찾지 못했습니다: {file_path.name}")
+    raise ValueError("대학알리미 취업현황 파일에서 헤더 행을 찾지 못했습니다.")
 
-    df = pd.read_excel(file_path, header=header_row)
-    df.columns = df.columns.astype(str).str.strip()
-    df = df.dropna(how="all")
 
-    return df
+
+def build_top_header(raw_no_header: pd.DataFrame, header_row: int) -> list[str]:
+    """
+    병합셀로 구성된 최상위 헤더를 오른쪽으로 전파한다.
+
+    예:
+    졸업자(A) [남, 여] -> 두 열 모두 졸업자(A)
+    취업자(B) [건강보험/해외/농림어업/개인창작/1인창업/프리랜서 × 남녀]
+        -> 해당 모든 열을 취업자(B)로 인식
+    """
+    values = raw_no_header.iloc[header_row].tolist()
+    result = []
+    current = ""
+
+    for value in values:
+        text = normalize_text(value)
+        if text:
+            current = text
+        result.append(current)
+
+    return result
+
+
+
+def find_data_start_row(raw_no_header: pd.DataFrame, header_row: int) -> int:
+    """헤더 아래에서 연도와 학교명이 실제 값으로 시작하는 첫 행을 찾는다."""
+    for idx in range(header_row + 1, min(header_row + 15, len(raw_no_header))):
+        year_value = pd.to_numeric(raw_no_header.iloc[idx, 0], errors="coerce")
+        if pd.notna(year_value):
+            return idx
+
+    raise ValueError("대학알리미 취업현황 파일에서 데이터 시작 행을 찾지 못했습니다.")
+
+
+
+def find_single_column(top_header: list[str], keyword: str, required: bool = True):
+    matches = [i for i, value in enumerate(top_header) if keyword in value]
+
+    if not matches:
+        if required:
+            raise KeyError(f"'{keyword}'에 해당하는 열을 찾지 못했습니다.")
+        return None
+
+    return matches[0]
+
+
+
+def find_group_columns(top_header: list[str], keyword: str) -> list[int]:
+    matches = [i for i, value in enumerate(top_header) if keyword in value]
+
+    if not matches:
+        raise KeyError(f"'{keyword}'에 해당하는 열 묶음을 찾지 못했습니다.")
+
+    return matches
+
+
+
+def sum_numeric_columns(df: pd.DataFrame, column_indices: list[int]) -> pd.Series:
+    numeric = pd.concat(
+        [to_number(df.iloc[:, idx]) for idx in column_indices],
+        axis=1,
+    )
+    return numeric.sum(axis=1, min_count=1)
+
+
+
+def mean_numeric_columns(df: pd.DataFrame, column_indices: list[int]) -> pd.Series:
+    numeric = pd.concat(
+        [to_number(df.iloc[:, idx]) for idx in column_indices],
+        axis=1,
+    )
+    return numeric.mean(axis=1)
+
+
+
+def read_academyinfo_employment(file_path: Path, public_year: int) -> pd.DataFrame:
+    """
+    대학알리미 '졸업생의 취업 현황' 원자료를 다단 헤더 구조 그대로 읽는다.
+
+    주의:
+    이 파일은 졸업자/취업자/진학자 등의 상위 항목 아래에 남·여 및
+    취업 세부유형이 여러 열로 나뉘어 있다. 따라서 단순히 첫 번째
+    '졸업자' 또는 '취업자' 열을 선택하면 남성 값 또는 특정 취업유형만
+    읽게 된다. 반드시 상위 항목에 속한 모든 하위 열을 합산해야 한다.
+    """
+    raw = pd.read_excel(file_path, header=None)
+    raw = raw.dropna(how="all").reset_index(drop=True)
+
+    header_row = find_header_row(raw)
+    top_header = build_top_header(raw, header_row)
+    data_start_row = find_data_start_row(raw, header_row)
+
+    data = raw.iloc[data_start_row:].copy().reset_index(drop=True)
+
+    col_year = find_single_column(top_header, "연도")
+    col_school = find_single_column(top_header, "학교명")
+    col_region = find_single_column(top_header, "지역")
+    col_type = find_single_column(top_header, "설립구분")
+
+    graduate_cols = find_group_columns(top_header, "졸업자(A)")
+    employed_cols = find_group_columns(top_header, "취업자(B)")
+    advancement_cols = find_group_columns(top_header, "진학자(C)")
+    military_cols = find_group_columns(top_header, "입대자(D)")
+    unavailable_cols = find_group_columns(top_header, "취업불가능자(E)")
+    foreign_cols = find_group_columns(top_header, "외국인유학생(F)")
+    excluded_cols = find_group_columns(top_header, "제외인정자(G)")
+
+    employment_rate_col = find_single_column(top_header, "취업률(%)")
+    retention_cols = [
+        i for i, value in enumerate(top_header)
+        if "유지취업률" in value
+    ]
+
+    result = pd.DataFrame()
+    result["공시연도"] = public_year
+    result["자료연도"] = to_number(data.iloc[:, col_year]).astype("Int64")
+    result["대학명"] = data.iloc[:, col_school].astype(str).str.strip()
+    result["지역"] = data.iloc[:, col_region].astype(str).str.strip()
+    result["설립구분"] = data.iloc[:, col_type].astype(str).str.strip()
+
+    # 핵심 수정: 상위 항목에 속한 남/여 및 모든 하위 세부유형을 합산한다.
+    result["졸업자"] = sum_numeric_columns(data, graduate_cols)
+    result["취업자"] = sum_numeric_columns(data, employed_cols)
+    result["진학자"] = sum_numeric_columns(data, advancement_cols)
+    result["입대자"] = sum_numeric_columns(data, military_cols)
+    result["취업불가능자"] = sum_numeric_columns(data, unavailable_cols)
+    result["외국인유학생"] = sum_numeric_columns(data, foreign_cols)
+    result["제외인정자"] = sum_numeric_columns(data, excluded_cols)
+    result["취업률(%)_원자료"] = to_number(data.iloc[:, employment_rate_col])
+
+    if retention_cols:
+        result["유지취업률(%)"] = mean_numeric_columns(data, retention_cols)
+    else:
+        result["유지취업률(%)"] = pd.NA
+
+    # 실제 데이터 행만 유지
+    result = result[
+        result["자료연도"].notna()
+        & result["대학명"].notna()
+        & ~result["대학명"].isin(["", "nan", "None"])
+    ].copy()
+
+    return result
 
 
 # =========================
@@ -114,59 +240,14 @@ for file in excel_files:
     public_year = get_public_year_from_filename(file)
     print(f"읽는 중: {file.name} / 공시연도: {public_year}")
 
-    df = read_academyinfo_excel(file)
-    df["공시연도"] = public_year
-
+    df = read_academyinfo_employment(file, public_year)
     data_list.append(df)
 
 raw = pd.concat(data_list, ignore_index=True)
 
 
 # =========================
-# 5. 필요한 컬럼 표준화
-# =========================
-
-col_year = find_column(raw, "연도")
-col_school = find_column(raw, "학교명")
-col_region = find_column(raw, "지역")
-col_type = find_column(raw, "설립구분")
-
-col_graduate = find_column(raw, "졸업자")
-col_employed = find_column(raw, "취업자")
-col_advancement = find_column(raw, "진학자")
-col_military = find_column(raw, "입대자")
-col_unavailable = find_column(raw, "취업불가능자")
-col_foreign = find_column(raw, "외국인유학생")
-col_excluded = find_column(raw, "제외인정자")
-col_employment_rate = find_column(raw, "취업률")
-
-col_retention_rate = find_column_optional(raw, "유지취업률")
-
-employment = pd.DataFrame()
-
-employment["공시연도"] = raw["공시연도"]
-employment["자료연도"] = to_number(raw[col_year]).astype("Int64")
-employment["대학명"] = raw[col_school].astype(str).str.strip()
-employment["지역"] = raw[col_region].astype(str).str.strip()
-employment["설립구분"] = raw[col_type].astype(str).str.strip()
-
-employment["졸업자"] = to_number(raw[col_graduate])
-employment["취업자"] = to_number(raw[col_employed])
-employment["진학자"] = to_number(raw[col_advancement])
-employment["입대자"] = to_number(raw[col_military])
-employment["취업불가능자"] = to_number(raw[col_unavailable])
-employment["외국인유학생"] = to_number(raw[col_foreign])
-employment["제외인정자"] = to_number(raw[col_excluded])
-employment["취업률(%)_원자료"] = to_number(raw[col_employment_rate])
-
-if col_retention_rate is not None:
-    employment["유지취업률(%)"] = to_number(raw[col_retention_rate])
-else:
-    employment["유지취업률(%)"] = pd.NA
-
-
-# =========================
-# 6. 학교명 표준화
+# 5. 학교명 표준화
 # =========================
 
 name_map = {
@@ -176,29 +257,19 @@ name_map = {
     "영산대학교(해운대)": "영산대학교",
 }
 
-employment["대학명"] = employment["대학명"].replace(name_map)
+raw["대학명"] = raw["대학명"].replace(name_map)
 
 
 # =========================
-# 7. 22개 대학만 필터링
+# 6. 22개 대학만 필터링
 # =========================
 
-filtered = employment[employment["대학명"].isin(target["대학명"])].copy()
+filtered = raw[raw["대학명"].isin(target["대학명"])].copy()
 
 
 # =========================
-# 8. 캠퍼스 분리 대학 합산
+# 7. 캠퍼스 분리 대학 합산
 # =========================
-
-sum_cols = [
-    "졸업자",
-    "취업자",
-    "진학자",
-    "입대자",
-    "취업불가능자",
-    "외국인유학생",
-    "제외인정자",
-]
 
 grouped = (
     filtered
@@ -213,10 +284,11 @@ grouped = (
         제외인정자=("제외인정자", "sum"),
         취업률_원자료_평균=("취업률(%)_원자료", "mean"),
         유지취업률_평균=("유지취업률(%)", "mean"),
+        원자료_행수=("대학명", "size"),
     )
 )
 
-# 취업률 계산 기준:
+# 취업률 공식(대학알리미 공시식):
 # 취업률 = 취업자 / (졸업자 - 진학자 - 입대자 - 취업불가능자 - 외국인유학생 - 제외인정자) * 100
 
 grouped["취업률_계산분모"] = (
@@ -239,20 +311,44 @@ grouped["진학률(%)"] = (
 grouped["유지취업률_평균"] = grouped["유지취업률_평균"].round(2)
 grouped["취업률_원자료_평균"] = grouped["취업률_원자료_평균"].round(2)
 
+# 단일 원자료 행인 대학은 재계산 취업률과 대학알리미 공시 취업률을 직접 대조할 수 있다.
+# 원자료 공시는 보통 소수점 첫째 자리, 재계산은 둘째 자리이므로 0.11%p 이내를 허용한다.
+grouped["취업률_원자료차이(%p)"] = (
+    grouped["취업률(%)"] - grouped["취업률_원자료_평균"]
+).abs().round(2)
+
+single_row_check = grouped["원자료_행수"].eq(1) & grouped["취업률_원자료_평균"].notna()
+qa_fail = grouped[single_row_check & grouped["취업률_원자료차이(%p)"].gt(0.11)]
+
+if not qa_fail.empty:
+    raise ValueError(
+        "취업률 원자료 대조에 실패했습니다. 다단 헤더 집계 구조를 확인하세요.\n"
+        + qa_fail[
+            [
+                "공시연도",
+                "자료연도",
+                "대학명",
+                "취업률(%)",
+                "취업률_원자료_평균",
+                "취업률_원자료차이(%p)",
+            ]
+        ].to_string(index=False)
+    )
+
 
 # =========================
-# 9. 대상 대학 정보 붙이기
+# 8. 대상 대학 정보 붙이기
 # =========================
 
 merged = grouped.merge(
     target,
     on="대학명",
-    how="left"
+    how="left",
 )
 
 
 # =========================
-# 10. 최종 컬럼 정리
+# 9. 최종 컬럼 정리
 # =========================
 
 result = merged[
@@ -275,12 +371,37 @@ result = merged[
         "취업률_계산분모",
         "취업률(%)",
         "취업률_원자료_평균",
+        "취업률_원자료차이(%p)",
         "진학률(%)",
         "유지취업률_평균",
+        "원자료_행수",
     ]
 ].copy()
 
 result = result.sort_values(["대학명", "공시연도"])
+
+
+# =========================
+# 10. 구조 검증
+# =========================
+
+expected_rows = len(target) * len(excel_files)
+
+if len(result) != expected_rows:
+    raise ValueError(
+        f"예상 행 수와 다릅니다. 예상={expected_rows}, 실제={len(result)}"
+    )
+
+missing = sorted(set(target["대학명"]) - set(result["대학명"]))
+if missing:
+    raise ValueError(f"누락 대학이 있습니다: {missing}")
+
+per_university = result["대학명"].value_counts()
+if not per_university.eq(len(excel_files)).all():
+    raise ValueError(
+        "대학별 연도 수가 일치하지 않습니다.\n"
+        + per_university.sort_index().to_string()
+    )
 
 
 # =========================
@@ -300,11 +421,16 @@ print("\n공시연도별 행 수")
 print(result["공시연도"].value_counts().sort_index())
 
 print("\n자료연도 확인")
-print(result[["공시연도", "자료연도"]].drop_duplicates().sort_values(["공시연도", "자료연도"]))
+print(
+    result[["공시연도", "자료연도"]]
+    .drop_duplicates()
+    .sort_values(["공시연도", "자료연도"])
+)
 
-missing = sorted(set(target["대학명"]) - set(result["대학명"]))
-print("\n누락 대학")
-print(missing)
+print("\n취업률 원자료 대조 최대 차이(%p)")
+print(
+    result.loc[result["원자료_행수"].eq(1), "취업률_원자료차이(%p)"].max()
+)
 
 print("\n미리보기")
 print(result.head())
