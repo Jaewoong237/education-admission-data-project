@@ -216,3 +216,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+# Project local working files
+/reports/powerbi_dashboard_dataset/education_admission_dashboard2.pbix
+/reports/spss_validation/*_before_employment_fix.sav
+/*.hwpx
