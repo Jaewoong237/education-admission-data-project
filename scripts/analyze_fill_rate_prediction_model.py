@@ -528,17 +528,55 @@ def save_random_forest_importance(
         encoding="utf-8-sig"
     )
 
-    top_importance = importance_df.head(15).sort_values("importance")
+    # 발표용 그래프: 상위 8개 변수만 표시
+    feature_labels = {
+        "advancement_rate": "졸업생 진학률",
+        "competition_rate": "경쟁률",
+        "employment_rate": "취업률",
+        "admission_quota": "입학정원",
+        "applicants": "지원자 수",
+        "region_경북": "지역: 경북",
+        "recruitment_quota": "모집인원",
+        "year": "연도",
+    }
 
-    plt.figure(figsize=(8, 6))
-    plt.barh(top_importance["feature"], top_importance["importance"])
-    plt.title("Random Forest Feature Importance")
-    plt.xlabel("Importance")
-    plt.ylabel("Feature")
+    top_importance = importance_df.head(8).copy()
+
+    top_importance["feature_label"] = top_importance["feature"].map(
+        lambda x: feature_labels.get(x, x)
+    )
+
+    top_importance = top_importance.sort_values("importance")
+
+    plt.figure(figsize=(8, 5.2))
+
+    bars = plt.barh(
+        top_importance["feature_label"],
+        top_importance["importance"]
+    )
+
+    plt.title("랜덤포레스트 변수 중요도", fontsize=14, fontweight="bold")
+    plt.xlabel("변수 중요도")
+    plt.ylabel("")
+
+    plt.bar_label(
+        bars,
+        fmt="%.3f",
+        padding=3,
+        fontsize=9
+    )
+
+    plt.xlim(0, top_importance["importance"].max() * 1.15)
+
     plt.tight_layout()
-    plt.savefig(FIGURE_DIR / "random_forest_feature_importance.png", dpi=300)
-    plt.close()
 
+    plt.savefig(
+        FIGURE_DIR / "random_forest_feature_importance.png",
+        dpi=300,
+        bbox_inches="tight"
+    )
+
+    plt.close()
     return importance_df
 
 
