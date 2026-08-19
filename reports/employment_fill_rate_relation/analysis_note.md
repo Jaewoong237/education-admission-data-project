@@ -6,8 +6,8 @@
 
 ## 전체 상관분석 결과
 
-- 신입생 충원율과 employment_rate의 피어슨 상관계수: 0.2365
-- 신입생 충원율과 advancement_rate의 피어슨 상관계수: 0.4131
+- 신입생 충원율과 employment_rate의 피어슨 상관계수: 0.1053
+- 신입생 충원율과 advancement_rate의 피어슨 상관계수: 0.4065
 - 신입생 충원율과 competition_rate의 피어슨 상관계수: 0.4254
 
 ## 해석 유의사항

@@ -27,28 +27,28 @@
 훈련/검증 데이터 분할 결과 기준으로 가장 낮은 테스트 RMSE를 보인 모형은 다음과 같다.
 
 - 최적 모형: Linear_Regression
-- Test MAE: 2.138
-- Test RMSE: 2.484
-- Test R-squared: 0.552
+- Test MAE: 2.016
+- Test RMSE: 2.399
+- Test R-squared: 0.582
 
 5-fold 교차검증 기준 결과는 다음과 같다.
 
-- CV MAE 평균: 2.921
-- CV RMSE 평균: 3.858
-- CV R-squared 평균: -0.425
+- CV MAE 평균: 2.917
+- CV RMSE 평균: 3.936
+- CV R-squared 평균: -0.513
 
 ## 랜덤포레스트 변수 중요도 상위 변수
 
-- competition_rate: 0.4400
-- advancement_rate: 0.3096
-- admission_quota: 0.0610
-- employment_rate: 0.0562
-- region_경북: 0.0308
-- applicants: 0.0263
-- recruitment_quota: 0.0181
-- year: 0.0156
-- analysis_group_수도권-사립-비교: 0.0073
-- analysis_group_지방-사립-비교: 0.0054
+- advancement_rate: 0.3930
+- competition_rate: 0.3360
+- employment_rate: 0.0801
+- admission_quota: 0.0500
+- applicants: 0.0406
+- region_경북: 0.0382
+- recruitment_quota: 0.0192
+- year: 0.0145
+- analysis_group_수도권-사립-비교: 0.0061
+- region_부산: 0.0045
 
 ## 해석
 본 분석은 신입생 충원율을 단순히 관찰하는 데서 나아가, 경쟁률·취업률·진학률·지역 특성 등이 충원율 예측에 어느 정도 기여하는지 확인하기 위한 탐색적 예측모형 분석이다.
