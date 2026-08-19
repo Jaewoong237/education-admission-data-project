@@ -404,7 +404,7 @@ def build_research_question_summary() -> pd.DataFrame:
             "main_method": "상관분석, 회귀분석",
             "main_output_path": "reports/employment_fill_rate_relation/",
             "dashboard_use": "취업률·진학률·경쟁률과 충원율 관계 확인",
-            "summary": "취업률은 충원율과 약한 양의 상관을 보였으나, 회귀분석에서는 진학률과 경쟁률이 더 뚜렷한 설명력을 보였다.",
+            "summary": "취업률과 충원율 간의 상관은 낮고 통계적으로 유의하지 않았으며, 회귀분석에서는 진학률과 경쟁률이 유의한 설명력을 보였다.",
         },
         {
             "research_question": "RQ3",
