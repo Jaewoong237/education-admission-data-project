@@ -3,29 +3,29 @@ fill_rate ~ employment_rate + advancement_rate + competition_rate + C(year)
 
                             OLS Regression Results                            
 ==============================================================================
-Dep. Variable:              fill_rate   R-squared:                       0.259
-Model:                            OLS   Adj. R-squared:                  0.197
-Method:                 Least Squares   F-statistic:                     4.197
-Date:                Tue, 18 Aug 2026   Prob (F-statistic):            0.00245
-Time:                        14:15:19   Log-Likelihood:                -178.77
-No. Observations:                  66   AIC:                             369.5
-Df Residuals:                      60   BIC:                             382.7
+Dep. Variable:              fill_rate   R-squared:                       0.178
+Model:                            OLS   Adj. R-squared:                  0.110
+Method:                 Least Squares   F-statistic:                     2.601
+Date:                Tue, 25 Aug 2026   Prob (F-statistic):             0.0340
+Time:                        14:47:15   Log-Likelihood:                -137.29
+No. Observations:                  66   AIC:                             286.6
+Df Residuals:                      60   BIC:                             299.7
 Df Model:                           5                                         
 Covariance Type:            nonrobust                                         
 ====================================================================================
                        coef    std err          t      P>|t|      [0.025      0.975]
 ------------------------------------------------------------------------------------
-Intercept           99.1203      5.756     17.220      0.000      87.606     110.634
-C(year)[T.2024]      0.4470      1.170      0.382      0.704      -1.894       2.788
-C(year)[T.2025]     -0.1542      1.218     -0.127      0.900      -2.591       2.282
-employment_rate     -0.1169      0.095     -1.225      0.225      -0.308       0.074
-advancement_rate     0.1660      0.073      2.272      0.027       0.020       0.312
-competition_rate     0.4541      0.169      2.695      0.009       0.117       0.791
+Intercept          102.8999      3.127     32.910      0.000      96.646     109.154
+C(year)[T.2024]      0.4875      0.624      0.781      0.438      -0.762       1.737
+C(year)[T.2025]      0.6560      0.653      1.004      0.319      -0.651       1.963
+employment_rate     -0.0935      0.052     -1.791      0.078      -0.198       0.011
+advancement_rate     0.0624      0.038      1.635      0.107      -0.014       0.139
+competition_rate     0.1526      0.078      1.947      0.056      -0.004       0.309
 ==============================================================================
-Omnibus:                       38.223   Durbin-Watson:                   1.398
-Prob(Omnibus):                  0.000   Jarque-Bera (JB):              131.506
-Skew:                          -1.663   Prob(JB):                     2.78e-29
-Kurtosis:                       9.063   Cond. No.                         795.
+Omnibus:                       71.902   Durbin-Watson:                   1.645
+Prob(Omnibus):                  0.000   Jarque-Bera (JB):              603.086
+Skew:                          -3.157   Prob(JB):                    1.10e-131
+Kurtosis:                      16.396   Cond. No.                         811.
 ==============================================================================
 
 Notes:
