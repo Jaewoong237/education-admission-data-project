@@ -19,7 +19,7 @@ OUTPUT_PATH = OUTPUT_DIR / "freshman_fill_rate_target_universities.csv"
 
 
 # =========================
-# 2. 대상 대학 목록 불러오기
+# 2. 대상 대학 목록
 # =========================
 
 target = pd.read_csv(TARGET_PATH, encoding="utf-8-sig")
@@ -27,38 +27,96 @@ target["대학명"] = target["대학명"].astype(str).str.strip()
 
 
 # =========================
-# 3. 대학알리미 엑셀 읽기 함수
+# 3. 숫자 변환
 # =========================
+
+def to_number(series):
+    return pd.to_numeric(
+        series.astype(str)
+        .str.replace(",", "", regex=False)
+        .str.replace("%", "", regex=False)
+        .str.replace(" ", "", regex=False)
+        .str.replace("-", "0", regex=False)
+        .str.strip(),
+        errors="coerce",
+    ).fillna(0)
+
+
+# =========================
+# 4. 대학알리미 원자료 읽기
+# =========================
+# 2023~2025 원자료 헤더 구조 직접 확인 완료
+#
+# 6  : 입학정원(A)
+# 7  : 모집인원 계
+# 8  : 정원내 모집인원(B)
+# 10 : 지원자 계
+# 11 : 정원내 지원자(C)
+# 13 : 입학자 계
+# 14 : 정원내 입학자 남
+# 15 : 정원내 입학자 여
+# 18 : 공시 정원내 신입생 충원율
+# 19 : 공시 경쟁률
 
 def read_academyinfo_excel(file_path: Path) -> pd.DataFrame:
-    preview = pd.read_excel(file_path, header=None, nrows=30)
+    raw = pd.read_excel(file_path, header=None)
 
-    header_row = None
+    # 실제 데이터는 6행(index=6)부터
+    df = raw.iloc[6:].copy()
 
-    for idx, row in preview.iterrows():
-        row_values = [str(v).strip() for v in row.tolist()]
-        if "기준연도" in row_values and "학교" in row_values:
-            header_row = idx
-            break
+    result = pd.DataFrame({
+        "기준연도": df.iloc[:, 0],
+        "설립구분": df.iloc[:, 2],
+        "학교": df.iloc[:, 5],
 
-    if header_row is None:
-        raise ValueError(f"헤더 행을 찾지 못했습니다: {file_path.name}")
+        "입학정원": to_number(df.iloc[:, 6]),
 
-    df = pd.read_excel(file_path, header=header_row)
-    df.columns = df.columns.astype(str).str.strip()
-    df = df.dropna(how="all")
+        # 전체 기준값 - 검증용으로 보존
+        "모집인원_전체": to_number(df.iloc[:, 7]),
+        "지원자_전체": to_number(df.iloc[:, 10]),
+        "입학자_전체": to_number(df.iloc[:, 13]),
 
-    return df
+        # 본 분석에 사용할 정원내 기준값
+        "모집인원": to_number(df.iloc[:, 8]),
+        "지원자": to_number(df.iloc[:, 11]),
+
+        "정원내입학자_남": to_number(df.iloc[:, 14]),
+        "정원내입학자_여": to_number(df.iloc[:, 15]),
+
+        # 대학알리미 공시값 - 검증용
+        "공시_정원내_충원율": to_number(df.iloc[:, 18]),
+        "공시_경쟁률": to_number(df.iloc[:, 19]),
+    })
+
+    result["입학자"] = (
+        result["정원내입학자_남"]
+        + result["정원내입학자_여"]
+    )
+
+    result["기준연도"] = pd.to_numeric(
+        result["기준연도"], errors="coerce"
+    )
+
+    result = result.dropna(subset=["기준연도", "학교"]).copy()
+    result["기준연도"] = result["기준연도"].astype(int)
+    result["학교"] = result["학교"].astype(str).str.strip()
+    result["설립구분"] = result["설립구분"].astype(str).str.strip()
+
+    return result
 
 
 # =========================
-# 4. 원본 파일 합치기
+# 5. 2023~2025 원자료 합치기
 # =========================
 
-excel_files = sorted(RAW_DIR.glob("academyinfo_freshman_fill_rate_*.xlsx"))
+excel_files = sorted(
+    RAW_DIR.glob("academyinfo_freshman_fill_rate_*.xlsx")
+)
 
 if not excel_files:
-    raise FileNotFoundError(f"원본 엑셀 파일을 찾지 못했습니다: {RAW_DIR}")
+    raise FileNotFoundError(
+        f"원본 엑셀 파일을 찾지 못했습니다: {RAW_DIR}"
+    )
 
 data_list = []
 
@@ -69,11 +127,9 @@ for file in excel_files:
 
 raw = pd.concat(data_list, ignore_index=True)
 
-raw["학교"] = raw["학교"].astype(str).str.strip()
-
 
 # =========================
-# 5. 학교명 표준화
+# 6. 학교명 표준화
 # =========================
 
 name_map = {
@@ -87,92 +143,56 @@ raw["학교"] = raw["학교"].replace(name_map)
 
 
 # =========================
-# 6. 22개 대학만 필터링
+# 7. 22개 대학만 필터링
 # =========================
 
-filtered = raw[raw["학교"].isin(target["대학명"])].copy()
-
-
-# =========================
-# 7. 컬럼 찾기 함수
-# =========================
-
-def normalize_text(text):
-    return (
-        str(text)
-        .strip()
-        .replace(" ", "")
-        .replace("\n", "")
-        .replace("\r", "")
-        .replace("\t", "")
-    )
-
-
-def find_column(df, keyword):
-    for col in df.columns:
-        if keyword in normalize_text(col):
-            return col
-
-    print("\n[현재 컬럼 목록]")
-    for c in df.columns:
-        print(repr(c))
-
-    raise KeyError(f"'{keyword}'에 해당하는 컬럼을 찾지 못했습니다.")
-
-
-def to_number(series):
-    return pd.to_numeric(
-        series.astype(str)
-        .str.replace(",", "", regex=False)
-        .str.replace("%", "", regex=False)
-        .str.replace(" ", "", regex=False)
-        .str.replace("-", "0", regex=False),
-        errors="coerce"
-    ).fillna(0)
+filtered = raw[
+    raw["학교"].isin(target["대학명"])
+].copy()
 
 
 # =========================
-# 8. 필요한 숫자 컬럼 표준화
+# 8. 캠퍼스 분리 대학 합산
 # =========================
 
-column_keywords = {
-    "입학정원": "입학정원",
-    "모집인원": "모집인원",
-    "지원자": "지원자",
-    "입학자": "입학자",
-}
-
-print("\n[컬럼 매칭 확인]")
-
-for new_col, keyword in column_keywords.items():
-    source_col = find_column(filtered, keyword)
-    print(f"{new_col} ← {source_col}")
-    filtered[new_col] = to_number(filtered[source_col])
-
-
-# =========================
-# 9. 캠퍼스 분리 대학 합산
-# =========================
-
-numeric_columns = ["입학정원", "모집인원", "지원자", "입학자"]
+numeric_columns = [
+    "입학정원",
+    "모집인원_전체",
+    "지원자_전체",
+    "입학자_전체",
+    "모집인원",
+    "지원자",
+    "입학자",
+]
 
 grouped = (
     filtered
-    .groupby(["기준연도", "학교", "설립구분"], as_index=False)[numeric_columns]
+    .groupby(
+        ["기준연도", "학교", "설립구분"],
+        as_index=False
+    )[numeric_columns]
     .sum()
 )
 
+
+# =========================
+# 9. 정원내 지표 재계산
+# =========================
+
 grouped["정원내 신입생 충원율(%)"] = (
-    grouped["입학자"] / grouped["모집인원"].replace(0, pd.NA) * 100
+    grouped["입학자"]
+    / grouped["모집인원"].replace(0, pd.NA)
+    * 100
 ).round(1)
 
 grouped["경쟁률"] = (
-    grouped["지원자"] / grouped["모집인원"].replace(0, pd.NA)
-).round(2)
+    grouped["지원자"]
+    / grouped["모집인원"].replace(0, pd.NA)
+).round(1)
 
 
 # =========================
-# 10. 대상 대학 정보 붙이기
+# 10. 대상 대학 정보 결합
 # =========================
 
 merged = grouped.merge(
@@ -184,7 +204,7 @@ merged = grouped.merge(
 
 
 # =========================
-# 11. 최종 컬럼 정리
+# 11. 최종 컬럼
 # =========================
 
 result = merged[
@@ -196,32 +216,55 @@ result = merged[
         "수도권/지방",
         "대표/비교",
         "분석그룹",
+
         "입학정원",
+
+        # 정원내 분석 변수
         "모집인원",
         "지원자",
         "입학자",
         "정원내 신입생 충원율(%)",
         "경쟁률",
+
+        # 원자료 전체합 - 검증용
+        "모집인원_전체",
+        "지원자_전체",
+        "입학자_전체",
     ]
 ].copy()
 
-result["기준연도"] = result["기준연도"].astype(int)
-result = result.sort_values(["대학명", "기준연도"])
+result = result.sort_values(
+    ["대학명", "기준연도"]
+)
+
+result.to_csv(
+    OUTPUT_PATH,
+    index=False,
+    encoding="utf-8-sig"
+)
 
 
 # =========================
-# 12. 저장 및 확인
+# 12. 확인
 # =========================
-
-result.to_csv(OUTPUT_PATH, index=False, encoding="utf-8-sig")
 
 print("\n완료!")
 print(f"저장 위치: {OUTPUT_PATH}")
 print(f"전체 행 수: {len(result)}")
 
-print("\n대학별 행 수:")
-print(result["대학명"].value_counts().sort_index())
+print("\n부산외국어대학교 확인:")
+print(
+    result[
+        result["대학명"] == "부산외국어대학교"
+    ].to_string(index=False)
+)
 
-missing = sorted(set(target["대학명"]) - set(result["대학명"]))
-print("\n누락 대학:")
-print(missing)
+print("\n대학별 행 수:")
+print(
+    result["대학명"]
+    .value_counts()
+    .sort_index()
+)
+
+print("\n결측치:")
+print(result.isna().sum())
