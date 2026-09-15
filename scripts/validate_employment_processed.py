@@ -209,7 +209,7 @@ def main():
         f"- 진학률 재계산 일치: {int(data['검증_진학률계산일치'].sum())}/{len(data)}",
         f"- 원자료 공시 취업률 대조 통과: {int(data['검증_원자료취업률일치'].sum())}/{len(data)}",
         "",
-        f"상세 결과: {DETAIL_PATH}",
+        f"상세 결과: {DETAIL_PATH.relative_to(BASE_DIR).as_posix()}",
     ]
 
     SUMMARY_PATH.write_text("\n".join(summary_lines), encoding="utf-8")

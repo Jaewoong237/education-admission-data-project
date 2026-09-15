@@ -20,4 +20,4 @@
 - 진학률 재계산 일치: 66/66
 - 원자료 공시 취업률 대조 통과: 66/66
 
-상세 결과: C:\Users\Owner\대학생활\부산외국어대학교\4학년\대학원 포트폴리오 준비\education-admission-data-project\reports\data_validation\employment_rate_validation_detail.csv
+상세 결과: reports/data_validation/employment_rate_validation_detail.csv
