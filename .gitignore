@@ -220,3 +220,6 @@ __marimo__/
 /reports/powerbi_dashboard_dataset/education_admission_dashboard2.pbix
 /reports/spss_validation/*_before_employment_fix.sav
 /*.hwpx
+
+data/raw/**/*.xlsx
+data/raw/**/*.xls
